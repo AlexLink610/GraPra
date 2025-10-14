@@ -1,0 +1,106 @@
+# Created by https://www.gitignore.io/api/git,c++,cmake
+# Edit at https://www.gitignore.io/?templates=git,c++,cmake
+
+### C++ ###
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+#*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so*
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+### CMake ###
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+### CMake Patch ###
+# External projects
+*-prefix/
+
+### Git ###
+# Created by git for backups. To disable backups in Git:
+# $ git config --global mergetool.keepBackup false
+*.orig
+
+# Created by git when using merge tools for conflicts
+*.BACKUP.*
+*.BASE.*
+*.LOCAL.*
+*.REMOTE.*
+*_BACKUP_*.txt
+*_BASE_*.txt
+*_LOCAL_*.txt
+*_REMOTE_*.txt
+
+# End of https://www.gitignore.io/api/git,c++,cmake
+
+
+#################################################################
+# grapra stuff
+**/render-data
+**/build
+**/bbm-a1/bbm-a1
+**/bbm-a2/bbm-a2
+**/bbm-server/bbm-server
+**/mc_terrain-a3/terrain-a3
+**/pacmap-a4/pacmap-a4
+**/towerdefense-a4/towerdefense-a4
+**/imgui.ini
+
+# VS specific
+**/out/*
+**/.vs/*
+**/applications/.vs/*
+*.ilk
+*.pdb
+
+# vscode
+**/.vscode
+
+# clion
+**/cmake-build-debug
+
+# exceptions 
+!/common/cppgl/Makefile
+!/common/thirdparty/win/
+!/common/cppgl/submodules/glew-cmake/build
+!/common/cppgl/submodules/glew-cmake/Makefile
+!/common/cppgl/submodules/glew-cmake/auto/Makefile
+!/common/cppgl/submodules/glew-cmake/build/vc6/Makefile
+!/common/cppgl/submodules/glew-cmake/config/Makefile.solaris
+!/common/cppgl/submodules/glew-cmake/config/Makefile.solaris-gcc
