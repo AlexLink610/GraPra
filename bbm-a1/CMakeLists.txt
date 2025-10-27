@@ -56,3 +56,5 @@ endif()
 include_directories(common)
 
 add_subdirectory(applications)
+
+

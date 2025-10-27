@@ -43,6 +43,7 @@
 #    source groups and library command)
 #
 cmake_minimum_required( VERSION 3.22 )
+
 SET( HEADER_PATH ../include/assimp )
 
 if(NOT ANDROID AND ASSIMP_ANDROID_JNIIOSYSTEM)

@@ -153,14 +153,52 @@ void Player::update() {
 
 	if (moving) {
 		const float elapsed = float(movement_timer.look());
-		// HINT: Right here we may have skipped something tagged 'smooth player movement'
-		// NOTE: Use matrix 'model' for translation/scale and 'model_rot' for rotation
+		float t = elapsed / move_duration;
 
-		// HINT: Right here we may have skipped something tagged 'smooth camera movement'
+		glm::vec3 pos_tiles = base + t * move_dir;
+
+		model[3][0] = pos_tiles.x * render_settings::tile_size;
+		model[3][2] = pos_tiles.z * render_settings::tile_size;
+
+		model_rot = glm::rotate(glm::mat4(1), base_rotation + t * move_rotation, glm::vec3(0, 1, 0));
+
+		if (elapsed >= move_duration) {
+			moving = false;
+			base = base + move_dir;
+			model[3][0] = base.x * render_settings::tile_size;
+			model[3][2] = base.z * render_settings::tile_size;
+			base_rotation += move_rotation;
+			move_rotation = 0.f;
+		}
+
 		const glm::vec2& cam_offset = render_settings::character_camera_offset;
+
+		//Camera
+		if (id == player_id) {
+			auto cam = Camera::find("playercam");
+			if (cam) {
+				cam->pos = glm::vec3(model[3][0], cam_offset.y, model[3][2] + cam_offset.x);
+				glm::vec3 look_target = glm::vec3(model[3][0], 0.f, model[3][2]);
+				cam->dir = glm::normalize(look_target - cam->pos);
+				cam->up = glm::vec3(0, 1, 0);
+				cam->update();
+			}
+		}
+
+	}
+	//Idle Animation
+	if (!moving) {
+		const float wobble_speed = 0.005f;
+		const float wobble_amp = 0.2f;
+		float t = float(wobble_timer.look());
+		float offset = sinf(t * wobble_speed) * wobble_amp;
+		model[3][1] = render_settings::character_float_h + offset;
+	}
+	else { //reset "animation"
+		wobble_timer.begin();
+		model[3][1] = render_settings::character_float_h;
 	}
 
-	// HINT: Right here we may have skipped something tagged 'character idle animation'
 
 	// player particles
 	if (particle_timer.look() >= render_settings::particle_emitter_timeslice) {
@@ -169,8 +207,20 @@ void Player::update() {
 		const glm::vec3 pos = glm::vec3(model[3][0], model[3][1] - offset, model[3][2]);
 		const glm::vec3 dir = glm::normalize(glm::vec3(random_float(), -3, random_float()));
 		particles->add(pos, dir, (rand() % 1000) + 1000);
-		// HINT: Right here we may have skipped something tagged 'even more particles'
+		if (moving) {
+			for (int i = 0; i < 3; ++i) {
+				glm::vec3 v = glm::normalize(glm::vec3(
+					random_float() - 0.5f,
+					random_float() * 0.3f,
+					random_float() - 0.5f
+				));
+				v *= 0.3f * render_settings::tile_size;
+				particles_small->add(pos, v, 300 + rand() % 300);
+			}
+		}
+
 	}
+
 }
 
 void Player::draw() {
@@ -200,14 +250,55 @@ Box::Box(unsigned posx, unsigned posy, bool is_stone) : model(1.f), is_stone(is_
 }
 
 void Box::set_exploding(const glm::vec2& dir) {
+	if (exploding) return;
 	exploding = true;
-	// HINT: Right here we may have skipped something tagged 'crate explosion'
+	explo_timer.begin();
+
+	const size_t n = prototype_scatter.size();
+	explo_rot_axis.clear();
+	explo_rot_axis.reserve(n);
+	explo_rot_angle.clear();
+	explo_rot_angle.reserve(n);
+	explo_translation.clear();
+	explo_translation.reserve(n);
+
+	glm::vec3 launch = glm::normalize(glm::vec3(dir.x, 0.f, dir.y));
+	if (glm::length(launch) < 0.01f) launch = glm::vec3(1, 0, 0);
+
+	for (size_t i = 0; i < n; ++i) {
+		glm::vec3 axis = glm::normalize(glm::vec3(
+			random_float() - 0.5f,
+			random_float() + 0.25f,
+			random_float() - 0.5f
+		));
+		float ang_speed = (2.5f + 3.5f * random_float());
+		
+		glm::vec3 vel = 0.8f * render_settings::tile_size * (0.5f + random_float()) *
+			glm::normalize(launch + 0.35f * glm::vec3(random_float() - 0.5f, 0.2f * random_float(), random_float() - 0.5f));
+		
+		float lift = (1.0f+ 1.4f * random_float()) * render_settings::tile_size;
+		vel.y += lift;
+
+		explo_rot_axis.push_back(axis);
+		explo_rot_angle.push_back(ang_speed);
+		explo_translation.push_back(vel);		
+	}
+
+//more particles		
+	for (int i = 0; i < 120; ++i) {
+		glm::vec3 p = glm::vec3(model[3][0], model[3][1], model[3][2]);
+		glm::vec3 v = glm::normalize(glm::vec3(random_float() - 0.5f, random_float()*0.7f, random_float() - 0.5f));
+		v *= (0.8f + random_float() * 2.0f) * render_settings::tile_size;
+		particles_small->add(p, v, 400 + rand() % 400);
+	}
+	
+
 
 }
 
 bool Box::to_destroy() { 
-	// HINT: Right here we may have skipped something tagged 'crate explosion'
-	return exploding; 
+	if (!exploding) return false;
+	return explo_timer.look() > 1200;
 
 }
 
@@ -226,19 +317,71 @@ void Box::draw() {
 			elem->draw();
 			elem->unbind();
 		}
+		return;
 	}
-	// HINT: Right here we may have skipped something tagged 'crate explosion'
+	const float t = float(explo_timer.look()) * 0.001f;
+	const float g = 18.0f;
+
+	const size_t n = prototype_scatter.size();
+	for (size_t i = 0; i < n; ++i) {
+		glm::vec3 trans = explo_translation[i] * t + glm::vec3(0, -0.5f * g * t * t, 0);
+
+		float angle = explo_rot_angle[i] * t;
+
+		glm::mat4 M = model;
+		M = glm::translate(M, trans);
+		M = glm::rotate(M, angle, explo_rot_axis[i]);
+
+		auto& elem = prototype_scatter[i];
+		elem->model = M;
+		elem->bind();
+
+		Box::wood_material->bind(elem->shader);
+		elem->shader->uniform("uv_offset", uv_offset);
+		setup_light(elem->shader);
+		elem->draw();
+		elem->unbind();
+	}
+
+	
 }
 
 // ------------------------------------------------
 // Bomb
 
 Bomb::Bomb(int posx, int posy, int id) : x(posx), y(posy), id(id), model(1) {
-	// HINT: Right here we may have skipped something tagged 'render bombs'
+	float scale = render_settings::character_radius * 0.8f;
+	model[0][0] = scale;
+	model[1][1] = scale;
+	model[2][2] = scale;
+	model[3][0] = posx * render_settings::tile_size;
+	model[3][1] = 0.5f * render_settings::tile_size;
+	model[3][2] = posy * render_settings::tile_size;
 }
 
 void Bomb::update(){
-	// HINT: Right here we may have skipped something tagged 'even more particles'
+	float t = float(glfwGetTime());
+	float scale_factor = 0.8f + 0.1f * sinf(t * 10.0f);
+	model[0][0] = render_settings::character_radius * scale_factor;
+	model[1][1] = render_settings::character_radius * scale_factor;
+	model[2][2] = render_settings::character_radius * scale_factor;
+	for (int i = 0; i < 6; ++i) {
+		glm::vec3 p = glm::vec3(
+			model[3][0],
+			model[3][1] + 0.6f * render_settings::tile_size,
+			model[3][2]
+		);
+
+		glm::vec3 v = glm::normalize(glm::vec3(
+			random_float() - 0.5f,
+			random_float() * 0.8f + 0.6f,
+			random_float() - 0.5f
+		));
+
+		v *= 0.1f * render_settings::tile_size;
+		int lifetime = 300 + rand() % 300;
+		particles_small->add(p, v, lifetime);
+	}
 }
 
 void Bomb::draw() {
@@ -278,12 +421,42 @@ void Board::add_bomb(int x, int y, int id) {
 }
 
 void Board::update() {
+	//erase exploded crates
+	for (auto it = crates.begin(); it != crates.end(); ) {
+		if ((*it)->to_destroy()) {
+			it = crates.erase(it);
+		}
+		else
+		{
+			++it;
+		}
+	}
+	
+	//camera shake
+	if (camera_shake) {
+		float t = static_cast<float>(camera_shake_timer.look());
+		float duration = 200.0f;
+		auto cam = Camera::find("playercam");
+		if (cam) {
+			if (t > duration) {
+				camera_shake = false;
+				cam->pos = camera_original_pos;
+				cam->update();
+			}
+			else
+			{
+				float strength = (0.3f - (t / duration)) * 0.4f * render_settings::tile_size;
+				float shake_x = (random_float() - 0.5f) * strength;
+				float shake_y = (random_float() - 0.5f) * strength;
 
-	// HINT: Right here we may have skipped something tagged 'box explosion'
-	// HINT: Right here we may have skipped something tagged 'camera shake'
-
-	for (auto& elem : bombs)
+				cam->pos = camera_original_pos + glm::vec3(shake_x, 0.0f, shake_y);
+				cam->update();
+			}
+		}
+	}
+	for(auto& elem : bombs)
 		elem->update();
+	
 
 }
 
@@ -297,6 +470,8 @@ void Board::draw() {
 }
 
 void Board::explosion(int bomb_id, unsigned int codes) {
+	auto cam = Camera::find("playercam");
+	if (cam) camera_original_pos = cam->pos;
 	// Camera wobble on explode
 	camera_shake_timer.begin();
 	camera_shake = true;
@@ -314,7 +489,77 @@ void Board::explosion(int bomb_id, unsigned int codes) {
 		cerr << "ERROR: The server triggered an explosion for a bomb we don't have recorded!" << endl;
 		return;
 	}
-	// HINT: Right here we may have skipped something tagged 'map update'
+	glm::vec3 bomb_pos = glm::vec3(the_bomb->model[3][0], the_bomb->model[3][1], the_bomb->model[3][2]);
 
-	// HINT: Right here we may have skipped something tagged 'bomb particles'
+	//more particles
+	for (int i = 0; i < 200; i++) {
+		glm::vec3 dir = glm::normalize(glm::vec3(
+			random_float() - 0.5f,
+			random_float(),
+			random_float() - 0.5f
+		));
+		particles->add(bomb_pos, dir, 300 + rand() % 500);
+	}
+	//more particles
+	for (int i = 0; i < 100; ++i) {
+		glm::vec3 v = glm::normalize(glm::vec3(
+			random_float() - 0.5f,
+			random_float(),
+			random_float() - 0.5f
+		));
+		v *= (0.5f + random_float() * 1.8f) * render_settings::tile_size;
+		particles_small->add(bomb_pos, v, 600 + rand() % 600);
+	}
+
+
+
+
+	//decoding codes
+	const int len_posx = codes & 0x3;
+	const int len_negx = (codes >> 2) & 0x3;
+	const int len_posy = (codes >> 4) & 0x3;
+	const int len_negy = (codes >> 6) & 0x3;
+
+	//bomb tile coordinates
+	int bx = int(std::floor(bomb_pos.x / render_settings::tile_size + 0.5f));
+	int by = int(std::floor(bomb_pos.z / render_settings::tile_size + 0.5f));
+
+	auto process_dir = [&](int dx, int dy, int length) { //helper func to process one direction
+		for (int step = 1; step <= length; ++step) {
+			//current tile coordinates
+			int tx = bx + dx * step;
+			int ty = by + dy * step;
+
+			if (ty < 0 || ty >=tiles_y || tx < 0 || tx >= tiles_x) //check for OOB
+				break;
+			auto& cell = grid[ty][tx];
+			if (cell) {
+				if (cell->is_stone) break; //stop on stone
+				else{
+					cell->set_exploding(glm::vec2(dx, dy));
+					cell.reset();
+				}
+			}
+			//spawns in particles
+			glm::vec3 flame_pos = glm::vec3(
+				tx * render_settings::tile_size,
+				0.5f * render_settings::tile_size,
+				ty * render_settings::tile_size
+			);
+			for (int i = 0; i < 40; ++i) {
+				glm::vec3 dir = glm::normalize(glm::vec3(
+					random_float() - 0.5f,
+					random_float(),
+					random_float() - 0.5f
+				));
+				particles->add(flame_pos, dir, 300 + rand() % 400);
+			}
+		}
+	};
+	process_dir(+1, 0, len_posx);
+	process_dir(-1, 0, len_negx);
+	process_dir(0, +1, len_posy);
+	process_dir(0, -1, len_negy);
+
+
 }

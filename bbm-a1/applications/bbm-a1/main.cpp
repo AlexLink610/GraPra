@@ -46,7 +46,50 @@ void keyboard_callback(int key, int scancode, int action, int mods) {
 
 	// HINT key handling missing
 
+    //helper function that maps key input to direction
+    auto dir_from_key = [](int key) -> int {
+        switch (key) {
+        case GLFW_KEY_W:
+        case GLFW_KEY_UP:    return msg::key_code::up;
+        case GLFW_KEY_S:
+        case GLFW_KEY_DOWN:  return msg::key_code::down;
+        case GLFW_KEY_A:
+        case GLFW_KEY_LEFT:  return msg::key_code::left;
+        case GLFW_KEY_D:
+        case GLFW_KEY_RIGHT: return msg::key_code::right;
+        default:             return -1;
+        }
+    };
 
+
+    const int dir = dir_from_key(key);
+    if (dir != -1) {
+        //tracks previous state to avoid spamming
+        static bool pressed[4] = { false, false, false, false };
+
+        if (action == GLFW_PRESS) {
+            if (!pressed[dir]) {
+                pressed[dir] = true;
+                auto m = make_message<msg::key_updown>();
+                m.k = static_cast<uint8_t>(dir);
+                m.down = 1;
+                send_message(m);
+            }
+        }
+        else if (action == GLFW_RELEASE) {
+            if (pressed[dir]) {
+                pressed[dir] = false;
+                auto m = make_message<msg::key_updown>();
+                m.k = static_cast<uint8_t>(dir);
+                m.down = 0;
+                send_message(m);
+            }
+        }
+    }
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+        auto m = make_message<msg::key_drop>();
+        send_message(m);
+    }
 }
 
 void resize_callback(int w, int h) {
@@ -57,6 +100,9 @@ void resize_callback(int w, int h) {
 // main
 
 int main(int argc, char** argv) {
+
+
+
     if(!parse_cmdline(argc, argv)) return 0;
 
     // init context and set parameters

@@ -84,6 +84,7 @@ public:
 
 class Board {
 	int tiles_x, tiles_y;
+	glm::vec3 camera_original_pos;
 	std::vector<std::vector<std::shared_ptr<Box>>> grid;
 	std::vector<std::shared_ptr<Box>> stone_boxes;
 	std::list<std::shared_ptr<Box>> crates;
